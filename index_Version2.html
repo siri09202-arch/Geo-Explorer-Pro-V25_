@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Geo-Explorer Pro V25 - Comprehensive Maps</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@joergdietrich/leaflet.terminator"></script>
+    <!-- SunCalc Library for Sunrise/Sunset calculations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        :root { --primary: #1a73e8; --accent: #ea4335; }
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; font-family: 'Inter', 'Noto Sans JP', sans-serif; overflow: hidden; background: #000; }
+        #map { position: absolute; top: 0; left: 0; height: 100%; width: 100%; z-index: 10; background: #f0f0f0; }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+        }
+
+        .top-controls { z-index: 9999; }
+        .bottom-controls { z-index: 9999; }
+
+        #sidePanel { 
+            position: absolute; top: 0; left: 0; bottom: 0; z-index: 10000;
+            width: 420px; transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); 
+            display: flex; flex-direction: column; background: white;
+            box-shadow: 10px 0 50px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+        .panel-hidden { transform: translateX(-100%); }
+
+        .action-btn {
+            display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 10px;
+            border-radius: 10px; font-weight: 700; font-size: 12px; transition: all 0.2s ease;
+            background: #f8fafc; border: 1px solid #e2e8f0; color: #334155;
+        }
+        .action-btn.active-overlay { 
+            background: #eff6ff; 
+            border-color: #3b82f6; 
+            color: #1d4ed8;
+        }
+        .action-btn.active-base { background: #1a73e8; color: white; border-color: #1a73e8; }
+
+        #layerMenu { scrollbar-width: none; }
+        #layerMenu::-webkit-scrollbar { display: none; }
+
+        .image-loader {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f1f5f9;
+        }
+
+        .close-panel-btn {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            z-index: 9500;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border-radius: 9999px;
+            padding: 0.5rem;
+            color: #4b5563;
+            transition: all 0.2s;
+        }
+        .close-panel-btn:hover {
+            color: #ef4444;
+            transform: scale(1.1);
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(5px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-5px); }
+        }
+        .animate-tip {
+            animation: fadeInOut 10s infinite;
+        }
+
+        .filter-grayscale { filter: grayscale(100%); }
+        .filter-bw { filter: grayscale(100%) contrast(150%); }
+        .filter-rader-blue { filter: sepia(100%) hue-rotate(170deg) saturate(300%) brightness(0.8) contrast(1.2); }
+
+        .clock-label {
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 6px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            white-space: normal;
+            word-wrap: break-word;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.4);
+            text-align: center;
+            pointer-events: none;
+            line-height: 1.3;
+            min-width: 110px;
+            max-width: 160px;
+            display: inline-block;
+        }
+        .clock-time {
+            font-weight: 800;
+            font-size: 1.1em;
+            display: block;
+            margin: 2px 0;
+        }
+        .clock-sun {
+            font-size: 0.85em;
+            opacity: 0.9;
+            white-space: nowrap;
+            display: block;
+            margin-top: 2px;
+            color: #fbbf24;
+        }
+
+        .quiz-option {
+            width: 100%;
+            text-align: left;
+            padding: 14px 16px;
+            background: white;
+            border: 2px solid #f1f5f9;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+            margin-bottom: 8px;
+            line-height: 1.4;
+            display: block;
+            word-break: break-word;
+        }
+        .quiz-option:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+        .quiz-option.correct {
+            background: #dcfce7 !important;
+            border-color: #22c55e !important;
+            color: #15803d !important;
+        }
+        .quiz-option.incorrect {
+            background: #fee2e2 !important;
+            border-color: #ef4444 !important;
+            color: #b91c1c !important;
+        }
+
+        .leaflet-control-scale {
+            margin-bottom: 24px !important;
+            margin-left: 12px !important;
+        }
+        .leaflet-control-scale-line {
+            background: rgba(255, 255, 255, 0.7) !important;
+            backdrop-filter: blur(4px);
+            border: 2px solid #1a73e8 !important;
+            border-top: none !important;
+            color: #1a73e8 !important;
+            font-weight: 800 !important;
+            font-size: 10px !important;
+            text-shadow: none !important;
+        }
+
+        @media (max-width: 640px) {
+            #sidePanel { width: 100%; transform: translateY(100%); left: 0; top: auto; height: 85vh; border-radius: 32px 32px 0 0; }
+            .panel-hidden { transform: translateY(100%) !important; }
+            .close-panel-btn { top: 1.5rem; right: 1.5rem; }
+            .leaflet-control-scale { margin-bottom: 30px !important; }
+            #legendPanel { bottom: 3rem !important; max-width: 95vw !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="top-controls fixed top-6 left-6 right-6 pointer-events-none flex items-center justify-between gap-4">
+        <div class="w-14 shrink-0"></div>
+
+        <form onsubmit="event.preventDefault(); performSearch();" class="glass-panel flex-1 max-w-lg h-14 rounded-2xl flex items-center px-4 pointer-events-auto">
+            <button type="button" onclick="toggleSidePanel()" class="p-2 text-gray-400 hover:text-blue-600 transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            </button>
+            <input type="text" id="searchInput" placeholder="場所を検索..." class="flex-1 bg-transparent px-3 outline-none font-bold text-gray-800 text-sm">
+            <button type="submit" id="searchBtn" class="bg-blue-600 text-white p-2.5 rounded-xl shadow-lg hover:bg-blue-700 transition-all">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </button>
+        </form>
+
+        <button onclick="toggleLayerMenu()" class="glass-panel w-14 h-14 rounded-2xl flex items-center justify-center text-gray-500 hover:text-blue-600 transition-all pointer-events-auto shrink-0">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+        </button>
+    </div>
+
+    <div id="map"></div>
+    
+    <!-- Legend Panel -->
+    <div id="legendPanel" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[5000] glass-panel px-4 py-3 rounded-2xl hidden shadow-2xl transition-all duration-300 max-w-[90vw]">
+        <div id="legendTitle" class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">凡例</div>
+        <div id="legendContent" class="flex items-center gap-4 text-xs font-bold text-gray-700 whitespace-nowrap overflow-x-auto p-1">
+            <!-- Dynamic Content -->
+        </div>
+    </div>
+
+    <aside id="sidePanel" class="panel-hidden">
+        <button onclick="closeSidePanel()" class="close-panel-btn">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+
+        <div id="imageSection" class="relative w-full h-64 bg-gray-100 shrink-0 overflow-hidden">
+            <div id="poiImageLoader" class="image-loader">
+                <div id="loaderText" class="text-gray-400 text-[10px] font-black uppercase tracking-widest">Searching Wikipedia...</div>
+            </div>
+            <img id="poiImage" class="w-full h-full object-cover hidden" alt="Location view">
+            <div id="noImagePlaceholder" class="w-full h-full flex flex-col items-center justify-center bg-slate-50 text-slate-300 hidden">
+                <svg class="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                <span id="noImageText" class="text-[10px] font-bold uppercase tracking-widest">No Wikipedia Image</span>
+            </div>
+        </div>
+
+        <div class="p-8 space-y-6 pb-20">
+            <div class="space-y-4">
+                <div><h2 id="poiName" class="text-3xl font-black text-gray-900 leading-tight">場所を選択</h2></div>
+                <div id="addressSection" class="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <label id="labelAddr" class="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">📍 住所</label>
+                    <p id="addrText" class="text-sm font-bold text-gray-700 leading-relaxed"></p>
+                </div>
+                <div id="notFoundSection" class="hidden space-y-4 pt-2">
+                    <p id="notFoundMsg" class="text-sm font-medium text-gray-600 leading-relaxed">検索キーワードに誤字や脱字がないかご確認ください。</p>
+                    <button onclick="searchGoogleWeb()" id="searchGoogleBtn" class="action-btn active-base !justify-start px-4">🔍 Google 検索で探す</button>
+                </div>
+            </div>
+            
+            <div id="wikiContainer" class="hidden space-y-2">
+                <div class="flex items-center justify-between">
+                    <label id="labelWiki" class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Wikipedia 概要</label>
+                    <a id="wikiLink" href="#" target="_blank" class="text-[10px] font-bold text-blue-500 hover:underline">もっと見る</a>
+                </div>
+                <p id="wikiText" class="text-sm leading-relaxed text-gray-600 font-medium"></p>
+            </div>
+
+            <div id="quizSection" class="hidden bg-purple-50 p-6 rounded-3xl border border-purple-100 space-y-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="bg-purple-600 text-white p-1.5 rounded-lg">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </div>
+                        <label id="labelQuiz" class="text-[10px] font-black text-purple-600 uppercase tracking-widest">AI クイズ</label>
+                    </div>
+                    <button onclick="generateQuiz()" id="refreshQuizBtn" class="text-[10px] font-bold text-purple-400 hover:text-purple-600 transition-colors">別の問題</button>
+                </div>
+                
+                <div id="quizLoading" class="hidden py-4 flex flex-col items-center justify-center space-y-2">
+                    <div class="w-6 h-6 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
+                    <span id="quizLoadingText" class="text-[10px] font-bold text-purple-400 uppercase tracking-tighter text-center">AI がクイズを考えています...</span>
+                </div>
+
+                <div id="quizContent" class="space-y-4">
+                    <p id="quizQuestion" class="text-sm font-bold text-purple-900 leading-relaxed"></p>
+                    <div id="quizOptions" class="space-y-0"></div>
+                </div>
+            </div>
+
+            <div id="tipSection" class="bg-blue-50/50 p-5 rounded-3xl border border-blue-100 flex items-start gap-3 overflow-hidden">
+                <div class="bg-blue-600 text-white p-2 rounded-xl shrink-0">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                </div>
+                <div class="space-y-1">
+                    <label id="labelTip" class="text-[10px] font-black text-blue-400 uppercase tracking-widest">探索のヒント</label>
+                    <div id="tipContainer"><p id="tipText" class="text-xs font-bold text-blue-900/70 leading-relaxed animate-tip"></p></div>
+                </div>
+            </div>
+
+            <div id="linksSection" class="space-y-3 pt-4 border-t border-gray-100">
+                <label id="labelLinks" class="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">外部リンク・連携</label>
+                <div class="grid grid-cols-1 gap-2">
+                    <button onclick="navExternal('gmaps')" id="btnGmaps" class="action-btn active-base !justify-start px-4">📍 Google Maps で開く</button>
+                    <button onclick="navExternal('directions')" id="btnDirections" class="action-btn !justify-start px-4">🚗 ルート検索を開く</button>
+                    <button onclick="navExternal('reviews')" id="btnReviews" class="action-btn !justify-start px-4">⭐ レビュー・クチコミを見る</button>
+                    <button id="streetviewBtn" onclick="navExternal('streetview')" class="action-btn !justify-start px-4">🏙️ ストリートビューで開く</button>
+                    <button id="weatherBtn" onclick="navExternal('weather')" class="action-btn !justify-start px-4">☀️ <span id="weatherLabel">の天気</span></button>
+                    <button onclick="navExternal('earth')" id="btnEarth" class="action-btn !justify-start px-4">🌍 Google Earth で開く</button>
+                    <button onclick="navExternal('search')" class="action-btn !justify-start px-4">🔍 <span id="searchLabel">この場所について検索</span></button>
+                    <button onclick="navExternal('gsi')" id="btnGsi" class="action-btn !justify-start px-4">🗾 国土地理院地図</button>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <div id="layerMenu" class="glass-panel p-5 absolute top-24 right-6 z-[9999] hidden flex-col gap-5 w-80 rounded-3xl overflow-y-auto max-h-[75vh]">
+        <div>
+            <label id="labelLangHeader" class="text-[10px] font-black text-blue-500 uppercase tracking-widest block mb-3">Language / 言語設定</label>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="changeLanguage('ja')" id="lang-ja" class="action-btn active-base">🇯🇵 日本語</button>
+                <button onclick="changeLanguage('en')" id="lang-en" class="action-btn">🇺🇸 English</button>
+                <button onclick="changeLanguage('zh')" id="lang-zh" class="action-btn">🇨🇳 中文</button>
+                <button onclick="changeLanguage('ko')" id="lang-ko" class="action-btn">🇰🇷 한국어</button>
+            </div>
+        </div>
+
+        <div>
+            <label id="labelBase" class="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3">基本地図 - スタンダード</label>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="changeBase('osm')" id="base-osm" class="action-btn active-base">🗺️ 標準</button>
+                <button onclick="changeBase('roadmap')" id="base-roadmap" class="action-btn">🚗 道路地図</button>
+                <button onclick="changeBase('terrain')" id="base-terrain" class="action-btn">⛰️ 地形図</button>
+                <button onclick="changeBase('english')" id="base-english" class="action-btn">🇺🇸 英語地図</button>
+                <button onclick="changeBase('gsistd')" id="base-gsistd" class="action-btn">🗾 地理院標準</button>
+            </div>
+        </div>
+        <div>
+            <label id="labelMono" class="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3">モノトーン・特殊</label>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="changeBase('dark')" id="base-dark" class="action-btn">🕶️ ダーク</button>
+                <button onclick="changeBase('grayscale')" id="base-grayscale" class="action-btn">⚪ グレー</button>
+                <button onclick="changeBase('bw')" id="base-bw" class="action-btn">🏁 モノクロ</button>
+                <button onclick="changeBase('lightgray')" id="base-lightgray" class="action-btn">⚪ ライトグレー</button>
+            </div>
+        </div>
+        <div>
+            <label id="labelCustom" class="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3">カスタムテーマ</label>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="changeBase('rader_blue')" id="base-rader_blue" class="action-btn">📡 ブルー</button>
+                <button onclick="changeBase('rader_dark')" id="base-rader_dark" class="action-btn">🛰️ ダーク</button>
+            </div>
+        </div>
+        <div>
+            <label id="labelSat" class="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3">航空写真 (Satellite)</label>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="changeBase('satellite_g')" id="base-satellite_g" class="action-btn">🛰️ 衛星写真</button>
+                <button onclick="changeBase('satellite_hybrid')" id="base-satellite_hybrid" class="action-btn">🏷️ ハイブリッド</button>
+                <button onclick="changeBase('gsiortho')" id="base-gsiortho" class="action-btn">📸 地理院写真</button>
+                <button onclick="changeBase('esri')" id="base-esri" class="action-btn">🌐 Esri衛星</button>
+            </div>
+        </div>
+        <div>
+            <label id="labelOverlay" class="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-3">データ重ね合わせ</label>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="toggleOverlay('hybrid')" id="btn-hybrid" class="action-btn">🏷️ ラベル</button>
+                <button onclick="toggleOverlay('traffic')" id="btn-traffic" class="action-btn">🚥 交通状況</button>
+                <button onclick="toggleOverlay('transit')" id="btn-transit" class="action-btn">🚃 鉄道網</button>
+                <button onclick="toggleOverlay('eez')" id="btn-eez" class="action-btn">🚢 経済水域</button>
+                <button onclick="toggleOverlay('terminator')" id="btn-terminator" class="action-btn">🌘 昼夜</button>
+                <button onclick="toggleOverlay('clock')" id="btn-clock" class="action-btn">🕒 世界時計</button>
+        </div>
+    </div>
+
+    <script>
+        const apiKey = "";
+        let map, marker, currentLat, currentLng, currentLocationName, currentWikiText = "";
+        const baseLayers = {};
+        const overlays = {};
+        let activeBaseId = 'osm';
+        let tipInterval;
+        let clockInterval;
+        let terminatorInterval;
+        let currentLang = 'ja';
+        
+        const MIN_ZOOM = 3;
+        const MAX_ZOOM = 19;  
+        
+        const cities = [
+            { name: {ja: "東京", en: "Tokyo"}, tz: "Asia/Tokyo", lat: 35.6895, lng: 139.6917 },
+            { name: {ja: "アンカレッジ", en: "Anchorage"}, tz: "America/Anchorage", lat: 61.2181, lng: -149.9003 },
+            { name: {ja: "ジュノー", en: "Juneau"}, tz: "America/Juneau", lat: 58.3019, lng: -134.4197 },
+            { name: {ja: "ノーム", en: "Nome"}, tz: "America/Nome", lat: 64.5011, lng: -165.4064 },
+            { name: {ja: "シトカ", en: "Sitka"}, tz: "America/Sitka", lat: 57.0531, lng: -135.3300 },
+            { name: {ja: "ヤクタット", en: "Yakutat"}, tz: "America/Yakutat", lat: 59.5469, lng: -139.7272 },
+            { name: {ja: "ドーソン", en: "Dawson"}, tz: "America/Dawson", lat: 64.0600, lng: -139.4320 },
+            { name: {ja: "ロサンゼルス", en: "Los Angeles"}, tz: "America/Los_Angeles", lat: 34.0522, lng: -118.2437 },
+            { name: {ja: "ティファナ", en: "Tijuana"}, tz: "America/Tijuana", lat: 32.5149, lng: -117.0382 },
+            { name: {ja: "バンクーバー", en: "Vancouver"}, tz: "America/Vancouver", lat: 49.2827, lng: -123.1207 },
+            { name: {ja: "ホワイトホース", en: "Whitehorse"}, tz: "America/Whitehorse", lat: 60.7212, lng: -135.0568 },
+            { name: {ja: "ボイシ", en: "Boise"}, tz: "America/Boise", lat: 43.6150, lng: -116.2023 },
+            { name: {ja: "ケンブリッジベイ", en: "Cambridge Bay"}, tz: "America/Cambridge_Bay", lat: 69.1164, lng: -105.0528 },
+            { name: {ja: "チワワ", en: "Chihuahua"}, tz: "America/Chihuahua", lat: 28.6330, lng: -106.0691 },
+            { name: {ja: "クレストン", en: "Creston"}, tz: "America/Creston", lat: 49.0964, lng: -116.5133 },
+            { name: {ja: "ドーソンクリーク", en: "Dawson Creek"}, tz: "America/Dawson_Creek", lat: 55.7591, lng: -120.2377 },
+            { name: {ja: "デンバー", en: "Denver"}, tz: "America/Denver", lat: 39.7392, lng: -104.9903 },
+            { name: {ja: "エドモントン", en: "Edmonton"}, tz: "America/Edmonton", lat: 53.5461, lng: -113.4938 },
+            { name: {ja: "エルモシージョ", en: "Hermosillo"}, tz: "America/Hermosillo", lat: 29.0730, lng: -110.9559 },
+            { name: {ja: "イヌヴィク", en: "Inuvik"}, tz: "America/Inuvik", lat: 68.3607, lng: -133.7230 },
+            { name: {ja: "マサトラン", en: "Mazatlan"}, tz: "America/Mazatlan", lat: 23.2494, lng: -106.4111 },
+            { name: {ja: "フェニックス", en: "Phoenix"}, tz: "America/Phoenix", lat: 33.4484, lng: -112.0740 },
+            { name: {ja: "イエローナイフ", en: "Yellowknife"}, tz: "America/Yellowknife", lat: 62.4540, lng: -114.3718 },
+            { name: {ja: "シカゴ", en: "Chicago"}, tz: "America/Chicago", lat: 41.8781, lng: -87.6298 },
+            { name: {ja: "メリダ", en: "Merida"}, tz: "America/Merida", lat: 20.9674, lng: -89.5926 },
+            { name: {ja: "モンテレイ", en: "Monterrey"}, tz: "America/Monterrey", lat: 25.6866, lng: -100.3161 },
+            { name: {ja: "メキシコシティ", en: "Mexico City"}, tz: "America/Mexico_City", lat: 19.4326, lng: -99.1332 },
+            { name: {ja: "ウィニペグ", en: "Winnipeg"}, tz: "America/Winnipeg", lat: 49.8951, lng: -97.1384 },
+            { name: {ja: "レジーナ", en: "Regina"}, tz: "America/Regina", lat: 50.4452, lng: -104.6189 },
+            { name: {ja: "ボゴタ", en: "Bogota"}, tz: "America/Bogota", lat: 4.7110, lng: -74.0721 },
+            { name: {ja: "カンクン", en: "Cancun"}, tz: "America/Cancun", lat: 21.1619, lng: -86.8515 },
+            { name: {ja: "デトロイト", en: "Detroit"}, tz: "America/Detroit", lat: 42.3314, lng: -83.0458 },
+            { name: {ja: "ハバナ", en: "Havana"}, tz: "America/Havana", lat: 23.1136, lng: -82.3666 },
+            { name: {ja: "トロント", en: "Toronto"}, tz: "America/Toronto", lat: 43.6532, lng: -79.3832 },
+            { name: {ja: "ニューヨーク", en: "New York"}, tz: "America/New_York", lat: 40.7128, lng: -74.0060 },
+            { name: {ja: "リマ", en: "Lima"}, tz: "America/Lima", lat: -12.0464, lng: -77.0428 },
+            { name: {ja: "サンティアゴ", en: "Santiago"}, tz: "America/Santiago", lat: -33.4489, lng: -70.6693 },
+            { name: {ja: "ブエノスアイレス", en: "Buenos Aires"}, tz: "America/Argentina/Buenos_Aires", lat: -34.6037, lng: -58.3816 },
+            { name: {ja: "モンテビデオ", en: "Montevideo"}, tz: "America/Montevideo", lat: -34.9011, lng: -56.1645 },
+            { name: {ja: "サンパウロ", en: "Sao Paulo"}, tz: "America/Sao_Paulo", lat: -23.5505, lng: -46.6333 },
+            { name: {ja: "ブラジリア", en: "Brasilia"}, tz: "America/Sao_Paulo", lat: -15.7975, lng: -47.8919 },
+            { name: {ja: "ロンドン", en: "Europe/London"}, tz: "Europe/London", lat: 51.5074, lng: -0.1278 },
+            { name: {ja: "ダブリン", en: "Dublin"}, tz: "Europe/Dublin", lat: 53.3498, lng: -6.2603 },
+            { name: {ja: "リスボン", en: "Lisbon"}, tz: "Europe/Lisbon", lat: 38.7223, lng: -9.1393 },
+            { name: {ja: "レイキャビク", en: "Reykjavik"}, tz: "Atlantic/Reykjavik", lat: 64.1466, lng: -21.9426 },
+            { name: {ja: "アムステルダム", en: "Amsterdam"}, tz: "Europe/Amsterdam", lat: 52.3676, lng: 4.9041 },
+            { name: {ja: "ベルリン", en: "Berlin"}, tz: "Europe/Berlin", lat: 52.5200, lng: 13.4050 },
+            { name: {ja: "パリ", en: "Paris"}, tz: "Europe/Paris", lat: 48.8566, lng: 2.3522 },
+            { name: {ja: "ローマ", en: "Rome"}, tz: "Europe/Rome", lat: 41.9028, lng: 12.4964 },
+            { name: {ja: "マドリード", en: "Madrid"}, tz: "Europe/Madrid", lat: 40.4168, lng: -3.7038 },
+            { name: {ja: "ウィーン", en: "Vienna"}, tz: "Europe/Vienna", lat: 48.2082, lng: 16.3738 },
+            { name: {ja: "プラハ", en: "Prague"}, tz: "Europe/Prague", lat: 50.0755, lng: 14.4378 },
+            { name: {ja: "ワルシャワ", en: "Warsaw"}, tz: "Europe/Warsaw", lat: 52.2297, lng: 21.0122 },
+            { name: {ja: "ブダペスト", en: "Budapest"}, tz: "Europe/Budapest", lat: 47.4979, lng: 19.0402 },
+            { name: {ja: "ストックホルム", en: "Stockholm"}, tz: "Europe/Stockholm", lat: 59.3293, lng: 18.0686 },
+            { name: {ja: "オスロ", en: "Oslo"}, tz: "Europe/Oslo", lat: 59.9139, lng: 10.7522 },
+            { name: {ja: "ヘルシンキ", en: "Helsinki"}, tz: "Europe/Helsinki", lat: 60.1699, lng: 24.9384 },
+            { name: {ja: "アテネ", en: "Athens"}, tz: "Europe/Athens", lat: 37.9838, lng: 23.7275 },
+            { name: {ja: "イスタンブール", en: "Istanbul"}, tz: "Europe/Istanbul", lat: 41.0082, lng: 28.9784 },
+            { name: {ja: "ミンスク", en: "Minsk"}, tz: "Europe/Minsk", lat: 53.9006, lng: 27.5590 },
+            { name: {ja: "モスクワ", en: "Moscow"}, tz: "Europe/Moscow", lat: 55.7558, lng: 37.6173 },
+            { name: {ja: "テヘラン", en: "Tehran"}, tz: "Asia/Tehran", lat: 35.6892, lng: 51.3890 },
+            { name: {ja: "バグダッド", en: "Baghdad"}, tz: "Asia/Baghdad", lat: 33.3152, lng: 44.3661 },
+            { name: {ja: "リヤド", en: "Riyadh"}, tz: "Asia/Riyadh", lat: 24.7136, lng: 46.6753 },
+            { name: {ja: "ドーハ", en: "Doha"}, tz: "Asia/Qatar", lat: 25.2854, lng: 51.5310 },
+            { name: {ja: "アブダビ", en: "Abu Dhabi"}, tz: "Asia/Dubai", lat: 24.4539, lng: 54.3773 },
+            { name: {ja: "マスカット", en: "Muscat"}, tz: "Asia/Muscat", lat: 23.5859, lng: 58.4059 },
+            { name: {ja: "カブール", en: "Kabul"}, tz: "Asia/Kabul", lat: 34.5553, lng: 69.1771 },
+            { name: {ja: "カラチ", en: "Karachi"}, tz: "Asia/Karachi", lat: 24.8607, lng: 67.0011 },
+            { name: {ja: "デリー", en: "Delhi"}, tz: "Asia/Kolkata", lat: 28.6139, lng: 77.2090 },
+            { name: {ja: "コルカタ", en: "Kolkata"}, tz: "Asia/Kolkata", lat: 22.5726, lng: 88.3639 },
+            { name: {ja: "コロンボ", en: "Colombo"}, tz: "Asia/Colombo", lat: 6.9271, lng: 79.8612 },
+            { name: {ja: "カトマンズ", en: "Kathmandu"}, tz: "Asia/Kathmandu", lat: 27.7172, lng: 85.3240 },
+            { name: {ja: "ダッカ", en: "Dhaka"}, tz: "Asia/Dhaka", lat: 23.8103, lng: 90.4125 },
+            { name: {ja: "ヤンゴン", en: "Yangon"}, tz: "Asia/Yangon", lat: 16.8661, lng: 96.1951 },
+            { name: {ja: "バンコク", en: "Bangkok"}, tz: "Asia/Bangkok", lat: 13.7563, lng: 100.5018 },
+            { name: {ja: "プノンペン", en: "Phnom Penh"}, tz: "Asia/Phnom_Penh", lat: 11.5564, lng: 104.9282 },
+            { name: {ja: "ビエンチャン", en: "Vientiane"}, tz: "Asia/Vientiane", lat: 17.9757, lng: 102.6331 },
+            { name: {ja: "ハノイ", en: "Hanoi"}, tz: "Asia/Ho_Chi_Minh", lat: 21.0285, lng: 105.8542 },
+            { name: {ja: "ジャカルタ", en: "Jakarta"}, tz: "Asia/Jakarta", lat: -6.2088, lng: 106.8456 },
+            { name: {ja: "シンガポール", en: "Singapore"}, tz: "Asia/Singapore", lat: 1.3521, lng: 103.8198 },
+            { name: {ja: "クアラルンプール", en: "Kuala Lumpur"}, tz: "Asia/Kuala_Lumpur", lat: 3.1390, lng: 101.6869 },
+            { name: {ja: "マニラ", en: "Manila"}, tz: "Asia/Manila", lat: 14.5995, lng: 120.9842 },
+            { name: {ja: "香港", en: "Hong Kong"}, tz: "Asia/Hong_Kong", lat: 22.3193, lng: 114.1694 },
+            { name: {ja: "マカオ", en: "Macau"}, tz: "Asia/Macau", lat: 22.1987, lng: 113.5439 },
+            { name: {ja: "上海", en: "Shanghai"}, tz: "Asia/Shanghai", lat: 31.2304, lng: 121.4737 },
+            { name: {ja: "台北", en: "Taipei"}, tz: "Asia/Taipei", lat: 25.0330, lng: 121.5654 },
+            { name: {ja: "ソウル", en: "Seoul"}, tz: "Asia/Seoul", lat: 37.5665, lng: 126.9780 },
+            { name: {ja: "平壌", en: "Pyongyang"}, tz: "Asia/Pyongyang", lat: 39.0392, lng: 125.7625 },
+            { name: {ja: "ウランバートル", en: "Ulaanbaatar"}, tz: "Asia/Ulaanbaatar", lat: 47.8864, lng: 106.9057 },
+            { name: {ja: "パース", en: "Perth"}, tz: "Australia/Perth", lat: -31.9505, lng: 115.8605 },
+            { name: {ja: "ダーウィン", en: "Darwin"}, tz: "Australia/Darwin", lat: -12.4634, lng: 130.8456 },
+            { name: {ja: "ブリスベン", en: "Brisbane"}, tz: "Australia/Brisbane", lat: -27.4698, lng: 153.0251 },
+            { name: {ja: "シドニー", en: "Sydney"}, tz: "Australia/Sydney", lat: -33.8688, lng: 151.2093 },
+            { name: {ja: "メルボルン", en: "Melbourne"}, tz: "Australia/Melbourne", lat: -37.8136, lng: 144.9631 },
+            { name: {ja: "ホバート", en: "Hobart"}, tz: "Australia/Hobart", lat: -42.8821, lng: 147.3272 },
+            { name: {ja: "キャンベラ", en: "Canberra"}, tz: "Australia/Canberra", lat: -35.2809, lng: 149.1300 },
+            { name: {ja: "ウェリントン", en: "Wellington"}, tz: "Pacific/Auckland", lat: -41.2865, lng: 174.7762 },
+            { name: {ja: "オークランド", en: "Auckland"}, tz: "Pacific/Auckland", lat: -36.8485, lng: 174.7633 },
+            { name: {ja: "グアム", en: "Guam"}, tz: "Pacific/Guam", lat: 13.4443, lng: 144.7937 },
+            { name: {ja: "サイパン", en: "Saipan"}, tz: "Pacific/Saipan", lat: 15.1777, lng: 145.7515 },
+            { name: {ja: "ポートモレスビー", en: "Port Moresby"}, tz: "Pacific/Port_Moresby", lat: -9.4438, lng: 147.1803 },
+            { name: {ja: "ヌメア", en: "Noumea"}, tz: "Pacific/Noumea", lat: -22.2711, lng: 166.4416 },
+            { name: {ja: "昭和基地", en: "Syowa Station"}, tz: "Antarctica/Syowa", lat: -69.0042, lng: 39.5814 },
+            { name: {ja: "ミッドウェイ", en: "Midway"}, tz: "Pacific/Midway", lat: 28.2101, lng: -177.3761 },
+            { name: {ja: "ニウエ", en: "Niue"}, tz: "Pacific/Niue", lat: -19.0544, lng: -169.8672 },
+            { name: {ja: "パゴパゴ", en: "Pago Pago"}, tz: "Pacific/Pago_Pago", lat: -14.2781, lng: -170.7025 },
+            { name: {ja: "ホノルル", en: "Honolulu"}, tz: "Pacific/Honolulu", lat: 21.3069, lng: -157.8583 },
+            { name: {ja: "ラロトンガ", en: "Rarotonga"}, tz: "Pacific/Rarotonga", lat: -21.2367, lng: -159.7777 },
+            { name: {ja: "タヒチ", en: "Tahiti"}, tz: "Pacific/Tahiti", lat: -17.6509, lng: -149.4260 },
+            { name: {ja: "マルケサス", en: "Marquesas"}, tz: "Pacific/Marquesas", lat: -9.1000, lng: -139.5000 },
+            { name: {ja: "ガンビエ", en: "Gambier"}, tz: "Pacific/Gambier", lat: -23.1500, lng: -134.9667 },
+            { name: {ja: "ピトケアン", en: "Pitcairn"}, tz: "Pacific/Pitcairn", lat: -25.0667, lng: -130.1000 },
+            { name: {ja: "ガラパゴス", en: "Galapagos"}, tz: "Pacific/Galapagos", lat: -0.7399, lng: -90.3518 },
+            { name: {ja: "イースター", en: "Easter"}, tz: "Pacific/Easter", lat: -27.1127, lng: -109.3497 },
+            { name: {ja: "ナッソー", en: "Nassau"}, tz: "America/Nassau", lat: 25.0443, lng: -77.3504 },
+            { name: {ja: "ポルトープランス", en: "Port-au-Prince"}, tz: "America/Port-au-Prince", lat: 18.5392, lng: -72.3350 },
+            { name: {ja: "カラカス", en: "Caracas"}, tz: "America/Caracas", lat: 10.4806, lng: -66.9036 },
+            { name: {ja: "アスンシオン", en: "Asuncion"}, tz: "America/Asuncion", lat: -25.2637, lng: -57.5759 },
+            { name: {ja: "ラパス", en: "La Paz"}, tz: "America/La_Paz", lat: -16.4897, lng: -68.1193 },
+            { name: {ja: "アンギラ", en: "Anguilla"}, tz: "America/Anguilla", lat: 18.2170, lng: -63.0578 },
+            { name: {ja: "アンティグア", en: "Antigua"}, tz: "America/Antigua", lat: 17.0608, lng: -61.7964 },
+            { name: {ja: "アルバ", en: "Aruba"}, tz: "America/Aruba", lat: 12.5211, lng: -69.9683 },
+            { name: {ja: "バルバドス", en: "Barbados"}, tz: "America/Barbados", lat: 13.1939, lng: -59.5432 },
+            { name: {ja: "キュラソー", en: "Curacao"}, tz: "America/Curacao", lat: 12.1696, lng: -68.9900 },
+            { name: {ja: "ドミニカ", en: "Dominica"}, tz: "America/Dominica", lat: 15.4150, lng: -61.3710 },
+            { name: {ja: "グレナダ", en: "Grenada"}, tz: "America/Grenada", lat: 12.1165, lng: -61.6790 },
+            { name: {ja: "グアドループ", en: "Guadeloupe"}, tz: "America/Guadeloupe", lat: 16.2650, lng: -61.5510 },
+            { name: {ja: "マルティニーク", en: "Martinique"}, tz: "America/Martinique", lat: 14.6415, lng: -61.0242 },
+            { name: {ja: "モントセラト", en: "Montserrat"}, tz: "America/Montserrat", lat: 16.7425, lng: -62.1873 },
+            { name: {ja: "プエルトリコ", en: "Puerto Rico"}, tz: "America/Puerto_Rico", lat: 18.2208, lng: -66.5901 },
+            { name: {ja: "セント・バルテルミー", en: "St. Barthelemy"}, tz: "America/St_Barthelemy", lat: 17.9000, lng: -62.8333 },
+            { name: {ja: "セントキッツ", en: "St. Kitts"}, tz: "America/St_Kitts", lat: 17.3578, lng: -62.7830 },
+            { name: {ja: "セントルシア", en: "St. Lucia"}, tz: "America/St_Lucia", lat: 13.9094, lng: -60.9789 },
+            { name: {ja: "セントビンセント", en: "St. Vincent"}, tz: "America/St_Vincent", lat: 13.2528, lng: -61.1970 },
+            { name: {ja: "トルトラ", en: "Tortola"}, tz: "America/Tortola", lat: 18.4314, lng: -64.6231 },
+            { name: {ja: "バミューダ", en: "Bermuda"}, tz: "Atlantic/Bermuda", lat: 32.3078, lng: -64.7505 },
+            { name: {ja: "ノローニャ", en: "Noronha"}, tz: "America/Noronha", lat: -3.8548, lng: -32.4231 },
+            { name: {ja: "サウスジョージア", en: "South Georgia"}, tz: "Atlantic/South_Georgia", lat: -54.2811, lng: -36.5084 },
+            { name: {ja: "アゾレス", en: "Azores"}, tz: "Atlantic/Azores", lat: 37.7412, lng: -25.6756 },
+            { name: {ja: "カーボベルデ", en: "Cape Verde"}, tz: "Atlantic/Cape_Verde", lat: 14.9177, lng: -23.5092 },
+            { name: {ja: "フェロー諸島", en: "Faroe"}, tz: "Atlantic/Faroe", lat: 62.0078, lng: -6.7771 },
+            { name: {ja: "マデイラ", en: "Madeira"}, tz: "Atlantic/Madeira", lat: 32.7607, lng: -16.9595 },
+            { name: {ja: "マン島", en: "Isle of Man"}, tz: "Europe/Isle_of_Man", lat: 54.2361, lng: -4.5481 },
+            { name: {ja: "ジャージー", en: "Jersey"}, tz: "Europe/Jersey", lat: 49.2144, lng: -2.1312 },
+            { name: {ja: "ガーンジー", en: "Guernsey"}, tz: "Europe/Guernsey", lat: 49.4482, lng: -2.5895 },
+            { name: {ja: "コモロ", en: "Comoro"}, tz: "Indian/Comoro", lat: -11.6455, lng: 43.3333 },
+            { name: {ja: "マヨット", en: "Mayotte"}, tz: "Indian/Mayotte", lat: -12.8275, lng: 45.1662 },
+            { name: {ja: "マヘ", en: "Mahe"}, tz: "Indian/Mahe", lat: -4.6796, lng: 55.4920 },
+            { name: {ja: "モーリシャス", en: "Mauritius"}, tz: "Indian/Mauritius", lat: -20.3484, lng: 57.5522 },
+            { name: {ja: "レユニオン", en: "Reunion"}, tz: "Indian/Reunion", lat: -20.8820, lng: 55.4507 },
+            { name: {ja: "ケルゲレン", en: "Kerguelen"}, tz: "Indian/Kerguelen", lat: -49.3500, lng: 70.2167 },
+            { name: {ja: "モルディブ", en: "Maldives"}, tz: "Indian/Maldives", lat: 4.1755, lng: 73.5093 },
+            { name: {ja: "チャゴス", en: "Chagos"}, tz: "Indian/Chagos", lat: -7.3111, lng: 72.4222 },
+            { name: {ja: "ココス", en: "Cocos"}, tz: "Indian/Cocos", lat: -12.1642, lng: 96.8710 },
+            { name: {ja: "クリスマス", en: "Christmas"}, tz: "Indian/Christmas", lat: -10.4475, lng: 105.6904 },
+            { name: {ja: "パラオ", en: "Palau"}, tz: "Pacific/Palau", lat: 7.3508, lng: 134.4826 },
+            { name: {ja: "チューク", en: "Chuuk"}, tz: "Pacific/Chuuk", lat: 7.4467, lng: 151.8470 },
+            { name: {ja: "コスラエ", en: "Kosrae"}, tz: "Pacific/Kosrae", lat: 5.3167, lng: 162.9833 },
+            { name: {ja: "ポンペイ", en: "Pohnpei"}, tz: "Pacific/Pohnpei", lat: 6.9167, lng: 158.2167 },
+            { name: {ja: "ノーフォーク", en: "Norfolk"}, tz: "Pacific/Norfolk", lat: -29.0333, lng: 167.9500 },
+            { name: {ja: "ブーゲンビル", en: "Bougainville"}, tz: "Pacific/Bougainville", lat: -6.2640, lng: 155.5610 },
+            { name: {ja: "エファテ", en: "Efate"}, tz: "Pacific/Efate", lat: -17.7130, lng: 168.4410 },
+            { name: {ja: "ガダルカナル", en: "Guadalcanal"}, tz: "Pacific/Guadalcanal", lat: -9.5772, lng: 160.1456 },
+            { name: {ja: "フナフティ", en: "Funafuti"}, tz: "Pacific/Funafuti", lat: -8.5208, lng: 179.1962 },
+            { name: {ja: "クェゼリン", en: "Kwajalein"}, tz: "Pacific/Kwajalein", lat: 8.7167, lng: 167.7333 },
+            { name: {ja: "マジュロ", en: "Majuro"}, tz: "Pacific/Majuro", lat: 7.1167, lng: 171.3667 },
+            { name: {ja: "ナウル", en: "Nauru"}, tz: "Pacific/Nauru", lat: -0.5228, lng: 166.9315 },
+            { name: {ja: "タラワ", en: "Tarawa"}, tz: "Pacific/Tarawa", lat: 1.3333, lng: 173.0000 },
+            { name: {ja: "ウェイク", en: "Wake"}, tz: "Pacific/Wake", lat: 19.2833, lng: 166.6167 },
+            { name: {ja: "ワリス", en: "Wallis"}, tz: "Pacific/Wallis", lat: -13.3000, lng: -176.2000 },
+            { name: {ja: "エンダベリー", en: "Enderbury"}, tz: "Pacific/Enderbury", lat: -3.1333, lng: -171.0833 },
+            { name: {ja: "ファカオフォ", en: "Fakaofo"}, tz: "Pacific/Fakaofo", lat: -9.3803, lng: -171.2189 },
+            { name: {ja: "フィジー", en: "Fiji"}, tz: "Pacific/Fiji", lat: -18.1416, lng: 178.4419 },
+            { name: {ja: "トンガタプ", en: "Tongatapu"}, tz: "Pacific/Tongatapu", lat: -21.1667, lng: -175.2000 },
+            { name: {ja: "チャタム", en: "Chatham"}, tz: "Pacific/Chatham", lat: -43.9167, lng: -176.5000 },
+            { name: {ja: "アピア", en: "Apia"}, tz: "Pacific/Apia", lat: -13.8333, lng: -171.7667 },
+            { name: {ja: "キリティマティ", en: "Kiritimati"}, tz: "Pacific/Kiritimati", lat: 1.8888, lng: -157.4333 },
+            { name: {ja: "ワシントンD.C.", en: "Washington D.C."}, tz: "America/New_York", lat: 38.9072, lng: -77.0369 },
+            { name: {ja: "オタワ", en: "Ottawa"}, tz: "America/Toronto", lat: 45.4215, lng: -75.6972 },
+            { name: {ja: "アメリカ", en: "USA"}, tz: "America/Chicago", lat: 37.0902, lng: -95.7129 },
+            { name: {ja: "太平洋", en: "Pacific Ocean"}, tz: "UTC", lat: 0, lng: -160 },
+            { name: {ja: "大西洋", en: "Atlantic Ocean"}, tz: "UTC", lat: 0, lng: -30 },
+            { name: {ja: "アフリカ", en: "Africa"}, tz: "Africa/Nairobi", lat: -0.0236, lng: 37.9062 },
+            { name: {ja: "ヨーロッパ", en: "Europe"}, tz: "Europe/Berlin", lat: 54.5260, lng: 15.2551 },
+            { name: {ja: "アジア", en: "Asia"}, tz: "Asia/Shanghai", lat: 34.0479, lng: 100.6197 },
+            { name: {ja: "インド洋", en: "Indian Ocean"}, tz: "UTC", lat: -20, lng: 80 },
+            { name: {ja: "オーストラリア", en: "Australia Continent"}, tz: "Australia/Sydney", lat: -25.2744, lng: 133.7751 },
+            { name: {ja: "南極大陸", en: "Antarctica"}, tz: "Antarctica/South_Pole", lat: -90, lng: 0 },
+            { name: {ja: "北極", en: "Arctic"}, tz: "UTC", lat: 90, lng: 0 },
+            { name: {ja: "アルゼンチン", en: "Argentina"}, tz: "America/Argentina/Buenos_Aires", lat: -38.4161, lng: -63.6167 },
+            { name: {ja: "インディアナ", en: "Indiana"}, tz: "America/Indiana/Indianapolis", lat: 39.7684, lng: -86.1581 },
+            { name: {ja: "ケンタッキー", en: "Kentucky"}, tz: "America/Kentucky/Louisville", lat: 38.2527, lng: -85.7585 },
+            { name: {ja: "ノースダコタ", en: "North Dakota"}, tz: "America/North_Dakota/Beulah", lat: 47.2692, lng: -101.7813 },
+            { name: {ja: "UTC", en: "UTC"}, tz: "UTC", lat: 0, lng: 0 }
+        ];
+
+        function init() {
+            if (typeof L === 'undefined') return;
+            map = L.map('map', { 
+                center: [35.6812, 139.7671], 
+                zoom: 5, 
+                minZoom: MIN_ZOOM,    
+                maxZoom: MAX_ZOOM,    
+                zoomControl: true, 
+                attributionControl: false,
+                worldCopyJump: true,
+                maxBounds: [[-85, -500], [85, 500]],
+                maxBoundsViscosity: 0.1
+            });
+            map.zoomControl.setPosition('bottomright');
+            L.control.scale({ imperial: false, metric: true, position: 'bottomleft' }).addTo(map);
+
+            const tileOptions = { minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM, noWrap: false };
+            baseLayers.osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', tileOptions);
+            baseLayers.english = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', tileOptions);
+            baseLayers.gsistd = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', tileOptions);
+            baseLayers.gsiortho = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', tileOptions);
+            baseLayers.dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', tileOptions);
+            baseLayers.lightgray = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', tileOptions);
+            baseLayers.esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', tileOptions);
+            baseLayers.terrain = L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', tileOptions);
+            baseLayers.roadmap = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', tileOptions);
+            baseLayers.grayscale = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { ...tileOptions, className: 'filter-grayscale' });
+            baseLayers.bw = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { ...tileOptions, className: 'filter-bw' });
+            baseLayers.rader_blue = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { ...tileOptions, className: 'filter-rader-blue' });
+            baseLayers.rader_dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', tileOptions);
+            baseLayers.satellite_g = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', tileOptions);
+            baseLayers.satellite_hybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', tileOptions);
+
+            overlays.hybrid = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', { zIndex: 1000, ...tileOptions });
+            overlays.traffic = L.tileLayer('https://mt1.google.com/vt?lyrs=h@159000000,traffic|seconds_into_week:-1&style=3&x={x}&y={y}&z={z}', { zIndex: 900, opacity: 0.8, ...tileOptions });
+            overlays.transit = L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png', { zIndex: 920, ...tileOptions });
+            overlays.eez = L.tileLayer('https://geo.vliz.be/geoserver/gwc/service/tms/1.0.0/MarineRegions%3Aeez@EPSG%3A900913@png/{z}/{x}/{y}.png', { zIndex: 930, opacity: 0.6, tms: true, ...tileOptions });
+            
+            if (typeof L.terminator === 'function') overlays.terminator = L.terminator({ fillOpacity: 0.4, color: '#000814', zIndex: 950 });
+            overlays.clock = L.layerGroup(); 
+            
+            // Initialize map with OSM. Labels (overlays.hybrid) are NOT added by default.
+            baseLayers.osm.addTo(map);
+
+            map.on('click', e => updateUI(e.latlng.lat, e.latlng.lng));
+            startTipRotation();
+            applyUITranslation();
+        }
+
+        // ... uiTranslations ...
+        const uiTranslations = {
+            ja: {
+                searchPlaceholder: "場所を検索...",
+                poiDefault: "場所を選択",
+                labelAddr: "📍 住所",
+                labelWiki: "Wikipedia 概要",
+                labelWikiMore: "もっと見る",
+                labelQuiz: "AI クイズ",
+                btnRefreshQuiz: "別の問題",
+                quizLoading: "AI がクイズを考えています...",
+                labelTip: "探索のヒント",
+                labelLinks: "外部リンク・連携",
+                btnGmaps: "📍 Google マップ で開く",
+                btnDirections: "🚗 ルート検索を開く",
+                btnReviews: "⭐ レビュー・クチコミを見る",
+                btnStreetView: "🏙️ ストリートビューで開く",
+                btnEarth: "🌍 Google Earth で開く",
+                btnGsi: "🗾 国土地理院地図",
+                weatherSuffix: "の天気",
+                searchPrefix: "この場所について検索",
+                notFoundMsg: "検索キーワードに誤字や脱字がないかご確認ください。",
+                btnSearchGoogle: "🔍 Google 検索で探す",
+                labelBase: "基本地図 - スタンダード",
+                labelMono: "モノトーン・特殊",
+                labelCustom: "カスタムテーマ",
+                labelSat: "航空写真 (Satellite)",
+                labelOverlay: "データ重ね合わせ",
+                wikiLoader: "Wikipediaを検索中...",
+                noWikiImage: "Wikipedia画像なし",
+                labelLangHeader: "Language / 言語設定",
+                base_osm: "🗺️ 標準",
+                base_roadmap: "🚗 道路地図",
+                base_terrain: "⛰️ 地形図",
+                base_english: "🇺🇸 English",
+                base_gsistd: "🗾 地理院標準",
+                base_dark: "🕶️ ダーク",
+                base_grayscale: "⚪ グレー",
+                base_bw: "🏁 モノクロ",
+                base_lightgray: "⚪ ライトグレー",
+                base_rader_blue: "📡 ブルー",
+                base_rader_dark: "🛰️ ダーク",
+                base_satellite_g: "🛰️ 衛星写真",
+                base_satellite_hybrid: "🏷️ ハイブリッド",
+                base_gsiortho: "📸 地理院写真",
+                base_esri: "🌐 Esri衛星",
+                btn_hybrid: "🏷️ ラベル",
+                btn_traffic: "🚥 交通状況",
+                btn_transit: "🚃 鉄道網",
+                btn_eez: "🚢 排他的経済水域（EEZ）",
+                btn_terminator: "🌘 昼夜ライン",
+                btn_clock: "🕒 世界時計",
+                explanation: "解説",
+                legendTitle: "凡例", 
+                leg_fast: "順調", leg_slow: "混雑", leg_jam: "渋滞", leg_rail: "鉄道路線", 
+                leg_eez: "排他的経済水域", leg_night: "夜間",
+                tips: [
+                    "地図上のどこかを直接クリックすると、その場所の情報を瞬時に取得できます。",
+                    "「レイヤー」ボタンから、国土地理院の地形図やEsriの衛星写真に切り替えられます。",
+                    "検索で場所が見つからない時は、市区町村名を追加すると精度が上がります。",
+                    "「ハイブリッド」オーバーレイをオンにすると、道路名、海、川、山脈名が表示されます。",
+                    "鉄道網レイヤーを表示すれば、最寄り駅や路線のつながりを一目で確認できます。",
+                    "Wikipediaの概要をクリックすると、その場所の詳細な歴史を知ることができます。",
+                    "昼夜ラインを表示すれば、現在世界のどこが夜なのかをリアルタイムで確認できます。",
+                    "「経済水域 (EEZ)」をオンにすると、各国の排他的経済水域の境界線が表示されます。"
+                ]
+            },
+            en: {
+                searchPlaceholder: "Search locations...",
+                poiDefault: "Select a Place",
+                labelAddr: "📍 Address",
+                labelWiki: "Wikipedia Summary",
+                labelWikiMore: "See more",
+                labelQuiz: "AI Quiz",
+                btnRefreshQuiz: "New Quiz",
+                quizLoading: "AI is thinking...",
+                labelTip: "Explorer Tips",
+                labelLinks: "External Links",
+                btnGmaps: "📍 Open in Google Maps",
+                btnDirections: "🚗 Directions",
+                btnReviews: "⭐ Reviews",
+                btnStreetView: "🏙️ Street View",
+                btnEarth: "🌍 Google Earth",
+                btnGsi: "🗾 GSI Map (Japan)",
+                weatherSuffix: " Weather",
+                searchPrefix: "Search about this place",
+                notFoundMsg: "Please check your spelling or try another keyword.",
+                btnSearchGoogle: "🔍 Search on Google",
+                labelBase: "Base Maps - Standard",
+                labelMono: "Monotone & Special",
+                labelCustom: "Custom Themes",
+                labelSat: "Satellite Imagery",
+                labelOverlay: "Data Overlays",
+                wikiLoader: "Searching Wikipedia...",
+                noWikiImage: "No Wikipedia Image",
+                labelLangHeader: "Language Settings",
+                base_osm: "🗺️ Standard",
+                base_roadmap: "🚗 Road Map",
+                base_terrain: "⛰️ Terrain",
+                base_english: "🇺🇸 English Map",
+                base_gsistd: "🗾 GSI Std",
+                base_dark: "🕶️ Dark",
+                base_grayscale: "⚪ Gray",
+                base_bw: "🏁 B&W",
+                base_lightgray: "⚪ Light Gray",
+                base_rader_blue: "📡 Blue",
+                base_rader_dark: "🛰️ Dark",
+                base_satellite_g: "🛰️ Satellite",
+                base_satellite_hybrid: "🏷️ Hybrid",
+                base_gsiortho: "📸 GSI Ortho",
+                base_esri: "🌐 Esri Satellite",
+                btn_hybrid: "🏷️ Labels",
+                btn_traffic: "🚥 Traffic",
+                btn_transit: "🚃 Transit",
+                btn_eez: "🚢 EEZ",
+                btn_terminator: "🌘 Day and Night Line",
+                btn_clock: "🕒 World Clock and Date",
+                explanation: "Explanation",
+                legendTitle: "Legend", 
+                leg_fast: "Fast", leg_slow: "Slow", leg_jam: "Traffic Jam", leg_rail: "Railway", 
+                leg_eez: "EEZ Boundary", leg_night: "Night",
+                tips: [
+                    "Click anywhere on the map to instantly get information about that location.",
+                    "Switch to GSI topographic maps or Esri satellite imagery from the Layers button.",
+                    "If a place isn't found, try adding the city or prefecture name for better accuracy.",
+                    "Turn on the 'Hybrid' overlay to display road names, oceans, rivers and mountains.",
+                    "Enable the 'Transit' layer to see nearby stations and railway connections.",
+                    "Click the Wikipedia summary to learn about the history of the location.",
+                    "Show the 'Day/Night' line to see which parts of the world are currently in darkness.",
+                    "The 'EEZ' overlay shows the boundaries of Exclusive Economic Zones."
+                ]
+            },
+            zh: {
+                searchPlaceholder: "搜索地点...",
+                poiDefault: "选择地点",
+                labelAddr: "📍 地址",
+                labelWiki: "维基百科摘要",
+                labelWikiMore: "查看更多",
+                labelQuiz: "人工智能测验",
+                btnRefreshQuiz: "另一个问题",
+                quizLoading: "AI正在思考...",
+                labelTip: "探索提示",
+                labelLinks: "外部链接",
+                btnGmaps: "📍 在 Google 地图上打开",
+                btnDirections: "🚗 路线搜索",
+                btnReviews: "⭐ 查看评论",
+                btnStreetView: "🏙️ 街景",
+                btnEarth: "🌍 在 Google 地球中打开",
+                btnGsi: "🗾 日本国土地理院地图",
+                weatherSuffix: "的天气",
+                searchPrefix: "搜索关于此地点的信息",
+                notFoundMsg: "请检查拼写或尝试其他关键词。",
+                btnSearchGoogle: "🔍 在 Google 上搜索",
+                labelBase: "基本地图 - 标准",
+                labelMono: "单色/特殊",
+                labelCustom: "自定义主题",
+                labelSat: "卫星图像",
+                labelOverlay: "数据叠加",
+                wikiLoader: "正在搜索维基百科...",
+                noWikiImage: "无维基百科图片",
+                labelLangHeader: "语言设置",
+                base_osm: "🗺️ 标准",
+                base_roadmap: "🚗 路线图",
+                base_terrain: "⛰️ 地形图",
+                base_english: "🇺🇸 英语地图",
+                base_gsistd: "🗾 地理院标准",
+                base_dark: "🕶️ 深色",
+                base_grayscale: "⚪ 灰色",
+                base_bw: "🏁 黑白",
+                base_lightgray: "⚪ 浅灰色",
+                base_rader_blue: "📡 蓝色雷达",
+                base_rader_dark: "🛰️ 深色雷达",
+                base_satellite_g: "🛰️ 卫星照片",
+                base_satellite_hybrid: "🏷️ 混合图",
+                base_gsiortho: "📸 地理院航拍",
+                base_esri: "🌐 Esri 卫星",
+                btn_hybrid: "🏷️ 标签",
+                btn_traffic: "🚥 交通状况",
+                btn_transit: "🚃 铁路网",
+                btn_eez: "🚢 专属经济区（EEZ）",
+                btn_terminator: "🌘 日夜线",
+                btn_clock: "🕒 世界时钟和日期",
+                legendTitle: "图例", 
+                leg_fast: "通畅", leg_slow: "繁忙", leg_jam: "拥堵", leg_rail: "铁路线", 
+                leg_eez: "专属经济区", leg_night: "夜间",
+                tips: ["点击地图上的任何地方即可获取该地点的信息。"]
+            },
+            ko: {
+                searchPlaceholder: "장소 검색...",
+                poiDefault: "장所 선택",
+                labelAddr: "📍 주소",
+                labelWiki: "위키백과 요약",
+                labelWikiMore: "더 보기",
+                labelQuiz: "AI 퀴즈",
+                btnRefreshQuiz: "다른 문제",
+                quizLoading: "AI가 생각 중입니다...",
+                labelTip: "탐색 팁",
+                labelLinks: "외부 링크",
+                btnGmaps: "📍 Google 지도에서 열기",
+                btnDirections: "🚗 경로 검색",
+                btnReviews: "⭐ 리뷰 보기",
+                btnStreetView: "🏙️ 스트리트 뷰",
+                btnEarth: "🌍 Google 어스에서 열기",
+                btnGsi: "🗾 일본 국토지리원 지도",
+                weatherSuffix: "의 날씨",
+                searchPrefix: "이 장소에 대해 검색",
+                notFoundMsg: "검색어의 철자를 확인하거나 다른 키워드를 시도해 보세요.",
+                btnSearchGoogle: "🔍 Google 검색",
+                labelBase: "기본 지도 - 표준",
+                labelMono: "모노톤/특수",
+                labelCustom: "커스텀 테마",
+                labelSat: "위성 사진",
+                labelOverlay: "데이터 오버레이",
+                wikiLoader: "위키백과 검색 중...",
+                noWikiImage: "위키백과 이미지 없음",
+                labelLangHeader: "언어 설정",
+                base_osm: "🗺️ 표준",
+                base_roadmap: "🚗 도로 지도",
+                base_terrain: "⛰️ 지형도",
+                base_english: "🇺🇸 영어 지도",
+                base_gsistd: "🗾 국토지리원 표준",
+                base_dark: "🕶️ 다크",
+                base_grayscale: "⚪ 그레이",
+                base_bw: "🏁 흑백",
+                base_lightgray: "⚪ 라이트 그레이",
+                base_rader_blue: "📡 블루 레이더",
+                base_rader_dark: "🛰️ 다크 레이더",
+                base_satellite_g: "🛰️ 위성 사진",
+                base_satellite_hybrid: "🏷️ 하이브리드",
+                base_gsiortho: "📸 국토지리원 항공",
+                base_esri: "🌐 Esri 위성",
+                btn_hybrid: "🏷️ 라벨",
+                btn_traffic: "🚥 교통 상황",
+                btn_transit: "🚃 철도망",
+                btn_eez: "🚢 배타적 경제수역(EEZ)",
+                btn_terminator: "🌘 밤낮 라인",
+                btn_clock: "🕒 세계 시계・날짜",
+                legendTitle: "범례", 
+                leg_fast: "원활", leg_slow: "서행", leg_jam: "정체", leg_rail: "철도 노선", 
+                leg_eez: "배타적 경제수역", leg_night: "야간",
+                tips: ["지도상의 아무 곳이나 클릭하면 해당 장소의 정보를 즉시 확인할 수 있습니다."]
+            }
+        };
+
+        // ... existing functions ...
+        function changeLanguage(lang) {
+            currentLang = lang;
+            document.querySelectorAll('[id^="lang-"]').forEach(el => el.classList.remove('active-base'));
+            document.getElementById(`lang-${lang}`)?.classList.add('active-base');
+            applyUITranslation();
+            updateClocks();
+            refreshTip(); 
+            updateLegend(); // Added call
+            // 名前が確定している場合はラベル類を再更新
+            if (currentLocationName) {
+                updateDynamicLabels();
+            }
+        }
+
+        function applyUITranslation() {
+            const t = uiTranslations[currentLang] || uiTranslations['en'];
+            document.getElementById('searchInput').placeholder = t.searchPlaceholder;
+            const poiEl = document.getElementById('poiName');
+            const poiDefaults = ["場所を選択", "Select a Place", "选择地点", "장소 선택"];
+            if (poiDefaults.includes(poiEl.innerText)) poiEl.innerText = t.poiDefault;
+            
+            document.getElementById('labelAddr').innerText = t.labelAddr;
+            document.getElementById('labelWiki').innerText = t.labelWiki;
+            document.getElementById('wikiLink').innerText = t.labelWikiMore;
+            document.getElementById('labelQuiz').innerText = t.labelQuiz;
+            document.getElementById('refreshQuizBtn').innerText = t.btnRefreshQuiz;
+            document.getElementById('quizLoadingText').innerText = t.quizLoading;
+            document.getElementById('labelTip').innerText = t.labelTip;
+            document.getElementById('labelLinks').innerText = t.labelLinks;
+            document.getElementById('btnGmaps').innerText = t.btnGmaps;
+            document.getElementById('btnDirections').innerText = t.btnDirections;
+            document.getElementById('btnReviews').innerText = t.btnReviews;
+            document.getElementById('streetviewBtn').innerText = t.btnStreetView;
+            document.getElementById('btnEarth').innerText = t.btnEarth;
+            document.getElementById('btnGsi').innerText = t.btnGsi;
+            document.getElementById('notFoundMsg').innerText = t.notFoundMsg;
+            document.getElementById('searchGoogleBtn').innerText = t.btnSearchGoogle;
+            document.getElementById('loaderText').innerText = t.wikiLoader;
+            document.getElementById('noImageText').innerText = t.noWikiImage;
+            document.getElementById('labelLangHeader').innerText = t.labelLangHeader;
+            document.getElementById('labelBase').innerText = t.labelBase;
+            document.getElementById('labelMono').innerText = t.labelMono;
+            document.getElementById('labelCustom').innerText = t.labelCustom;
+            document.getElementById('labelSat').innerText = t.labelSat;
+            document.getElementById('labelOverlay').innerText = t.labelOverlay;
+
+            const btnKeys = [
+                'base_osm', 'base_roadmap', 'base_terrain', 'base_english', 'base_gsistd',
+                'base_dark', 'base_grayscale', 'base_bw', 'base_lightgray',
+                'base_rader_blue', 'base_rader_dark',
+                'base_satellite_g', 'base_satellite_hybrid', 'base_gsiortho', 'base_esri',
+                'btn_hybrid', 'btn_traffic', 'btn_transit', 'btn_eez', 'btn_terminator', 'btn_clock'
+            ];
+            btnKeys.forEach(k => {
+                const el = document.getElementById(k.replace('_', '-'));
+                if (el && t[k]) el.innerText = t[k];
+            });
+            
+            updateDynamicLabels();
+            updateLegend(); // Ensure legend text is updated
+        }
+
+        // 動的な場所名を含むラベルの更新処理
+        function updateDynamicLabels() {
+            const t = uiTranslations[currentLang] || uiTranslations['en'];
+            const name = currentLocationName || "";
+            
+            // 天気ボタンの更新
+            const weatherLabel = document.getElementById('weatherLabel');
+            if (weatherLabel) {
+                if (currentLang === 'ja' || currentLang === 'zh' || currentLang === 'ko') {
+                    weatherLabel.innerText = name + t.weatherSuffix;
+                } else {
+                    weatherLabel.innerText = name + t.weatherSuffix;
+                }
+            }
+            
+            // 検索ボタンの更新
+            const searchLabel = document.getElementById('searchLabel');
+            if (searchLabel) {
+                if (currentLang === 'ja') {
+                    searchLabel.innerText = name + "について検索";
+                } else if (currentLang === 'en') {
+                    searchLabel.innerText = "Search about " + name;
+                } else if (currentLang === 'zh') {
+                    searchLabel.innerText = "搜索关于" + name + "的信息";
+                } else if (currentLang === 'ko') {
+                    searchLabel.innerText = name + "에 대해 검색";
+                }
+            }
+        }
+
+        function updateClocks() {
+            if (!overlays.clock || !map.hasLayer(overlays.clock)) return;
+            overlays.clock.clearLayers();
+            const now = new Date();
+            const localeMap = { ja: 'ja-JP', zh: 'zh-CN', ko: 'ko-KR', en: 'en-US' };
+            const locale = localeMap[currentLang] || localeMap['en'];
+            
+            cities.forEach(city => {
+                try {
+                    const cityName = city.name[currentLang] || city.name['en'];
+                    
+                    // Time Calculation
+                    const timeString = now.toLocaleTimeString(locale, { timeZone: city.tz, hour: '2-digit', minute: '2-digit', hour12: false });
+                    const dateString = now.toLocaleDateString(locale, { timeZone: city.tz, month: 'short', day: 'numeric' });
+                    
+                    // SunCalc Calculation
+                    // Note: SunCalc uses the passed date object. 'now' is acceptable for general world clock purposes.
+                    // For very high precision across datelines, one would create a date object specific to the city's calendar day.
+                    const sunTimes = (typeof SunCalc !== 'undefined') ? SunCalc.getTimes(now, city.lat, city.lng) : null;
+                    
+                    let sunInfoHtml = '';
+                    if (sunTimes && !isNaN(sunTimes.sunrise.getTime()) && !isNaN(sunTimes.sunset.getTime())) {
+                        const sunriseStr = sunTimes.sunrise.toLocaleTimeString(locale, { timeZone: city.tz, hour: '2-digit', minute: '2-digit', hour12: false });
+                        const sunsetStr = sunTimes.sunset.toLocaleTimeString(locale, { timeZone: city.tz, hour: '2-digit', minute: '2-digit', hour12: false });
+                        sunInfoHtml = `<span class="clock-sun">🌅${sunriseStr} 🌇${sunsetStr}</span>`;
+                    } else {
+                        // Polar day/night or error
+                        sunInfoHtml = `<span class="clock-sun">--:--</span>`;
+                    }
+
+                    const icon = L.divIcon({ 
+                        className: 'clock-marker', 
+                        html: `<div class="clock-label">
+                                <strong>${cityName}</strong><br>
+                                <span style="font-size:0.9em; opacity:0.8;">${dateString}</span>
+                                <span class="clock-time">${timeString}</span>
+                                ${sunInfoHtml}
+                               </div>`, 
+                        iconSize: [160, 90], 
+                        iconAnchor: [80, 45] 
+                    });
+                    L.marker([city.lat, city.lng], { icon: icon }).addTo(overlays.clock);
+                } catch(e) { console.error("Clock update error", e); }
+            });
+        }
+
+        function updateTerminator() {
+            if (overlays.terminator && typeof overlays.terminator.setTime === 'function') {
+                overlays.terminator.setTime(new Date());
+            }
+        }
+        
+        // NEW: Update Legend function
+        function updateLegend() {
+            const activeKeys = [];
+            
+            // Check standard overlays that need legends
+            ['traffic', 'transit', 'eez', 'terminator'].forEach(k => {
+                if (map.hasLayer(overlays[k])) activeKeys.push(k);
+            });
+
+            const panel = document.getElementById('legendPanel');
+            const content = document.getElementById('legendContent');
+            const title = document.getElementById('legendTitle');
+            
+            if (activeKeys.length === 0) {
+                panel.classList.add('hidden');
+                panel.classList.remove('flex');
+                return;
+            }
+
+            panel.classList.remove('hidden');
+            
+            const t = uiTranslations[currentLang] || uiTranslations['en'];
+            title.innerText = t.legendTitle || "Legend";
+            
+            content.innerHTML = '';
+            
+            activeKeys.forEach(key => {
+                const group = document.createElement('div');
+                group.className = 'flex items-center gap-3 border-r border-gray-300 last:border-0 pr-4 last:pr-0 pl-1 first:pl-0';
+                
+                if (key === 'traffic') {
+                    group.innerHTML = `
+                        <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500"></span><span>${t.leg_fast}</span></div>
+                        <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-orange-500"></span><span>${t.leg_slow}</span></div>
+                        <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span><span>${t.leg_jam}</span></div>
+                    `;
+                } else if (key === 'transit') {
+                    group.innerHTML = `<div class="flex items-center gap-1"><span class="w-6 h-1 bg-gray-800 border-b border-white"></span><span>${t.leg_rail}</span></div>`;
+                } else if (key === 'eez') {
+                    group.innerHTML = `<div class="flex items-center gap-1"><span class="w-6 h-1 border-t-2 border-dashed border-blue-600"></span><span>${t.leg_eez}</span></div>`;
+                } else if (key === 'terminator') {
+                    group.innerHTML = `<div class="flex items-center gap-1"><span class="w-3 h-3 bg-gray-900/50 border border-gray-600"></span><span>${t.leg_night}</span></div>`;
+                }
+                
+                content.appendChild(group);
+            });
+        }
+
+        function startTipRotation() { if (tipInterval) clearInterval(tipInterval); refreshTip(); tipInterval = setInterval(refreshTip, 10000); }
+        function refreshTip() {
+            const el = document.getElementById('tipText'); if (!el) return;
+            const t = uiTranslations[currentLang] || uiTranslations['en'];
+            const langTips = t.tips || uiTranslations['en'].tips;
+            el.classList.remove('animate-tip'); void el.offsetWidth; el.classList.add('animate-tip');
+            let nt; do { nt = langTips[Math.floor(Math.random() * langTips.length)]; } while (nt === el.innerText && langTips.length > 1); el.innerText = nt;
+        }
+
+        async function generateQuiz() {
+            if (!currentLocationName || !currentWikiText) return;
+            const qs = document.getElementById('quizSection'), ql = document.getElementById('quizLoading'), qc = document.getElementById('quizContent'), qq = document.getElementById('quizQuestion'), qo = document.getElementById('quizOptions'), rb = document.getElementById('refreshQuizBtn');
+            qs.classList.remove('hidden'); ql.classList.remove('hidden'); qc.classList.add('hidden'); rb.disabled = true;
+            const langNameMap = { ja: 'Japanese', zh: 'Chinese', ko: 'Korean', en: 'English' };
+            const langName = langNameMap[currentLang] || 'English';
+            const systemPrompt = `Expert trivia creator. Valid JSON only. Language: ${langName}. 3 options about ${currentLocationName}. Format: {"question": "...", "options": ["...", "...", "..."], "correctIndex": 0, "explanation": "..."}`;
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: `Place: ${currentLocationName}\nContext: ${currentWikiText}` }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, generationConfig: { responseMimeType: "application/json" } })
+                });
+                const data = await response.json(); const quiz = JSON.parse(data.candidates[0].content.parts[0].text);
+                
+                // Shuffle options randomly
+                const correctOption = quiz.options[quiz.correctIndex];
+                for (let i = quiz.options.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [quiz.options[i], quiz.options[j]] = [quiz.options[j], quiz.options[i]];
+                }
+                quiz.correctIndex = quiz.options.indexOf(correctOption);
+
+                qq.innerText = quiz.question; qo.innerHTML = '';
+                quiz.options.forEach((opt, idx) => {
+                    const btn = document.createElement('button'); btn.className = 'quiz-option'; btn.innerText = opt;
+                    btn.onclick = () => {
+                        qo.querySelectorAll('.quiz-option').forEach(b => b.disabled = true);
+                        if (idx === quiz.correctIndex) { btn.classList.add('correct'); btn.innerText += " ✅"; }
+                        else { btn.classList.add('incorrect'); btn.innerText += " ❌"; qo.querySelectorAll('.quiz-option')[quiz.correctIndex].classList.add('correct'); }
+                        const exp = document.createElement('div'); exp.className = 'mt-4 p-4 bg-purple-100/50 rounded-2xl text-xs font-bold text-purple-900/70 leading-relaxed border border-purple-200';
+                        exp.innerHTML = quiz.explanation; qo.appendChild(exp);
+                    };
+                    qo.appendChild(btn);
+                });
+                ql.classList.add('hidden'); qc.classList.remove('hidden');
+            } catch (e) { ql.classList.add('hidden'); qc.classList.remove('hidden'); } finally { rb.disabled = false; }
+        }
+
+        async function fetchWikipediaData(title) {
+            const container = document.getElementById('wikiContainer'), text = document.getElementById('wikiText'), link = document.getElementById('wikiLink'), loader = document.getElementById('poiImageLoader'), img = document.getElementById('poiImage'), ph = document.getElementById('noImagePlaceholder');
+            container.classList.add('hidden'); document.getElementById('quizSection').classList.add('hidden');
+            loader.classList.remove('hidden'); img.classList.add('hidden'); ph.classList.add('hidden');
+            try {
+                const res = await fetch(`https://${currentLang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`);
+                const data = await res.json();
+                if (data.extract) {
+                    currentWikiText = data.extract; text.innerText = data.extract;
+                    if (link && data.content_urls) link.href = data.content_urls.desktop.page;
+                    container.classList.remove('hidden'); setTimeout(generateQuiz, 10);
+                } else currentWikiText = "";
+                if (data.thumbnail?.source) { img.src = data.thumbnail.source; img.onload = () => { loader.classList.add('hidden'); img.classList.remove('hidden'); }; }
+                else { loader.classList.add('hidden'); ph.classList.remove('hidden'); }
+            } catch (e) { loader.classList.add('hidden'); ph.classList.remove('hidden'); currentWikiText = ""; }
+        }
+
+        function getSeaNameFallback(lat, lng) {
+            const isJa = currentLang === 'ja';
+            if (lat > 20 && lat < 50 && lng > 115 && lng < 160) {
+                if (lng < 138 && lat > 34) return isJa ? "日本海" : "Sea of Japan";
+                if (lng < 130 && lat < 34) return isJa ? "東シナ海" : "East China Sea";
+                if (lng > 140 && lat > 30) return isJa ? "北太平洋" : "North Pacific Ocean";
+                if (lng > 125 && lat < 30) return isJa ? "フィリピン海" : "Philippine Sea";
+                if (lat > 44 && lng > 140) return isJa ? "オホーツク海" : "Sea of Okhotsk";
+                return isJa ? "北太平洋" : "North Pacific Ocean";
+            }
+            if (lng > 100 || lng < -70) {
+                if (lat > 0) return isJa ? "北太平洋" : "North Pacific Ocean";
+                return isJa ? "南太平洋" : "South Pacific Ocean";
+            }
+            if (lng > -70 && lng < 20) {
+                if (lat > 0) return isJa ? "北大西洋" : "North Atlantic Ocean";
+                return isJa ? "南大西洋" : "South Atlantic Ocean";
+            }
+            if (lng > 20 && lng < 100) return isJa ? "インド洋" : "Indian Ocean";
+            if (lat > 70) return isJa ? "北極海" : "Arctic Ocean";
+            if (lat < -60) return isJa ? "南極海" : "Southern Ocean";
+            return isJa ? "海洋" : "Ocean";
+        }
+
+        async function updateUI(lat, lng, searchResult = null) {
+            currentLat = lat; currentLng = lng;
+            document.getElementById('sidePanel').classList.remove('panel-hidden');
+            ['imageSection','addressSection','linksSection','tipSection'].forEach(id => document.getElementById(id).classList.remove('hidden'));
+            document.getElementById('notFoundSection').classList.add('hidden');
+            if (marker) map.removeLayer(marker); marker = L.marker([lat, lng]).addTo(map);
+
+            if (searchResult) {
+                let zoom = 12;
+                if (searchResult.type === 'country') zoom = 4;
+                else if (['state', 'prefecture'].includes(searchResult.type)) zoom = 7;
+                map.flyTo([lat, lng], zoom, { animate: true, duration: 0.8 });
+            }
+
+            try {
+                let info;
+                // 修正: 検索結果(searchResult)があり、そこに住所情報が含まれている場合は、
+                // 新たにAPIを叩かずその情報を優先使用する（情報の食い違いを防ぐため）
+                if (searchResult && searchResult.address) {
+                    info = searchResult;
+                } else {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=${currentLang}&addressdetails=1&zoom=18`);
+                    info = await res.json();
+                }
+                
+                const addr = info.address || {};
+                
+                // 名称決定ロジックの改善: 
+                // 検索結果の名称(info.name)があればそれを最優先し、なければ住所要素から決定する
+                let name = info.name || "";
+                
+                if (!name || !isNaN(name)) { // 名前が無い、または数字だけの場合は住所から構築
+                    if (addr.village || addr.town || addr.city || addr.suburb || addr.neighbourhood) {
+                        name = addr.neighbourhood || addr.suburb || addr.village || addr.town || addr.city;
+                    } 
+                    else if (addr.state || addr.country) {
+                        name = addr.state || addr.country;
+                    }
+                    else if (addr.sea || addr.ocean) {
+                        name = addr.sea || addr.ocean;
+                    }
+                }
+                
+                // 海洋名などのフォールバック
+                if ((!name && (info.type === "sea" || info.type === "ocean" || info.category === "natural")) || (info.display_name && !name)) {
+                     name = info.name || info.display_name.split(',')[0];
+                }
+
+                const blacklist = ["海", "Sea", "不明", "Unnamed Road", "Unnamed", "水域", "Water", "Ocean", "海洋"];
+                if (!name || blacklist.some(b => name === b)) {
+                    if (Object.keys(addr).length > 2 && !addr.sea && !addr.ocean) {
+                         name = info.name || info.display_name.split(',')[0];
+                    } else {
+                         name = getSeaNameFallback(lat, lng);
+                    }
+                }
+
+                // 国名・都道府県などを明示的に組み立てる
+                let locationContext = "";
+                const parts = [];
+                
+                // 重複追加を防ぐためのヘルパー（修正：名前と同じ要素は住所欄に追加しない）
+                const addPart = (val) => {
+                    if (val && !parts.includes(val) && val !== name) parts.push(val);
+                };
+
+                // 利用可能な住所コンポーネントを収集
+                if (['ja', 'zh', 'ko'].includes(currentLang)) {
+                    // アジア圏：広域 -> 詳細
+                    if (addr.country) addPart(addr.country);
+                    if (addr.province) addPart(addr.province);
+                    if (addr.state) addPart(addr.state); // 都道府県
+                    if (addr.region) addPart(addr.region);
+                    if (addr.county) addPart(addr.county); // 郡
+                    if (addr.city) addPart(addr.city); // 市
+                    if (addr.ward) addPart(addr.ward); // 区
+                    if (addr.town) addPart(addr.town); // 町
+                    if (addr.village) addPart(addr.village); // 村
+                    if (addr.city_district) addPart(addr.city_district); // 地区・丁目
+                    if (addr.suburb) addPart(addr.suburb);
+                    if (addr.neighbourhood) addPart(addr.neighbourhood);
+                } else {
+                    // 欧米圏：詳細 -> 広域
+                    if (addr.neighbourhood) addPart(addr.neighbourhood);
+                    if (addr.suburb) addPart(addr.suburb);
+                    if (addr.city_district) addPart(addr.city_district);
+                    if (addr.town) addPart(addr.town);
+                    if (addr.village) addPart(addr.village);
+                    if (addr.ward) addPart(addr.ward);
+                    if (addr.city) addPart(addr.city);
+                    if (addr.county) addPart(addr.county);
+                    if (addr.state) addPart(addr.state);
+                    if (addr.province) addPart(addr.province);
+                    if (addr.country) addPart(addr.country);
+                }
+
+                // 重複を除去して結合
+                locationContext = parts.join(' / ');
+
+                // 構築できなかった場合は display_name を使用
+                if (!locationContext && info.display_name) {
+                    locationContext = info.display_name;
+                }
+
+                currentLocationName = name;
+                document.getElementById('poiName').innerText = currentLocationName;
+                document.getElementById('addrText').innerText = locationContext || (currentLang === 'ja' ? `${currentLocationName}周辺` : `Area around ${currentLocationName}`);
+                
+                updateDynamicLabels();
+                fetchWikipediaData(currentLocationName);
+            } catch(e) {
+                 currentLocationName = getSeaNameFallback(lat, lng);
+                 document.getElementById('poiName').innerText = currentLocationName;
+                 document.getElementById('addrText').innerText = currentLang === 'ja' ? `${currentLocationName}域内` : `Area within ${currentLocationName}`;
+                 
+                 updateDynamicLabels();
+                 fetchWikipediaData(currentLocationName);
+            }
+        }
+
+        async function performSearch() {
+            const q = document.getElementById('searchInput')?.value; if (!q) return;
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1&addressdetails=1&accept-language=${currentLang}`);
+                const data = await res.json();
+                if (data?.length > 0) updateUI(parseFloat(data[0].lat), parseFloat(data[0].lon), data[0]);
+                else showNotFound(q);
+            } catch (e) { showNotFound(q); }
+        }
+
+        function showNotFound(q) {
+            document.getElementById('sidePanel').classList.remove('panel-hidden');
+            ['imageSection','addressSection','wikiContainer','linksSection','tipSection','quizSection'].forEach(id => document.getElementById(id).classList.add('hidden'));
+            document.getElementById('notFoundSection').classList.remove('hidden');
+            document.getElementById('poiName').innerText = q;
+            currentLocationName = q;
+            updateDynamicLabels();
+        }
+
+        function changeBase(t) {
+            if (!baseLayers[t]) return;
+            document.querySelectorAll('[id^="base-"]').forEach(el => el.classList.remove('active-base'));
+            document.getElementById(`base-${t}`)?.classList.add('active-base');
+            if (map.hasLayer(baseLayers[activeBaseId])) map.removeLayer(baseLayers[activeBaseId]);
+            baseLayers[t].addTo(map); activeBaseId = t;
+            if (map.hasLayer(overlays.hybrid)) { map.removeLayer(overlays.hybrid); overlays.hybrid.addTo(map); }
+        }
+
+        function toggleOverlay(t) {
+            const btn = document.getElementById(`btn-${t}`);
+            
+            if (!overlays[t]) return;
+            
+            if (map.hasLayer(overlays[t])) { 
+                map.removeLayer(overlays[t]); 
+                btn?.classList.remove('active-overlay'); 
+                if (t === 'clock') clearInterval(clockInterval); 
+                if (t === 'terminator') clearInterval(terminatorInterval);
+            }
+            else { 
+                overlays[t].addTo(map); 
+                btn?.classList.add('active-overlay');
+                if (t === 'clock') { updateClocks(); clockInterval = setInterval(updateClocks, 30000); }
+                if (t === 'terminator') { updateTerminator(); terminatorInterval = setInterval(updateTerminator, 1000); }
+            }
+            updateLegend(); // Added
+        }
+
+        function toggleLayerMenu() { document.getElementById('layerMenu')?.classList.toggle('hidden'); }
+        function toggleSidePanel() { document.getElementById('sidePanel')?.classList.toggle('panel-hidden'); }
+        function closeSidePanel() { document.getElementById('sidePanel')?.classList.add('panel-hidden'); if (marker) { map.removeLayer(marker); marker = null; } }
+        
+        function searchGoogleWeb() {
+            if (!currentLocationName) return;
+            window.open(`https://www.google.com/search?q=${encodeURIComponent(currentLocationName)}`, '_blank');
+        }
+
+        function navExternal(t) {
+            if (!currentLat) return;
+            let u = '';
+            switch(t) {
+                case 'gmaps': u = `https://www.google.com/maps/search/?api=1&query=${currentLat},${currentLng}`; break;
+                case 'directions': u = `https://www.google.com/maps/dir/?api=1&destination=${currentLat},${currentLng}`; break;
+                case 'streetview': u = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${currentLat},${currentLng}`; break;
+                case 'weather': u = `https://www.google.com/search?q=${encodeURIComponent(currentLocationName + ' 天気')}`; break;
+                case 'earth': u = `https://earth.google.com/web/@${currentLat},${currentLng},0a,1000d,35y,0h,0t,0r`; break;
+                case 'search': u = `https://www.google.com/search?q=${encodeURIComponent(currentLocationName)}`; break;
+                case 'gsi': u = `https://maps.gsi.go.jp/#15/${currentLat}/${currentLng}/&base=std`; break;
+            }
+            if (u) window.open(u, '_blank');
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
